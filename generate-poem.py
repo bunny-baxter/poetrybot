@@ -6,10 +6,15 @@ import re
 import torch
 import transformers
 
+def validate_topp(value):
+    value = float(value)
+    if value <= 0.0 or value > 1.0:
+        raise argparse.ArgumentTypeError("Nucleus sampling probability must be in (0, 1].")
+    return value
+
 parser = argparse.ArgumentParser(prog = "Generate Poem")
 parser.add_argument("--temp", type = float, default = 1.0, help = "model temperature")
-# TODO: enforce topp >0 and <=1
-parser.add_argument("--topp", type = float, default = 1.0, help = "nucleus sampling cumulative probability")
+parser.add_argument("--topp", type = validate_topp, default = 1.0, help = "nucleus sampling cumulative probability")
 args = parser.parse_args()
 
 TOKENS_PER_LINE = 16
