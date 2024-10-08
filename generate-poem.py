@@ -1,8 +1,6 @@
 # Generates a poem.
 
 import argparse
-import random
-import re
 import torch
 import transformers
 
