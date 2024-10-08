@@ -53,8 +53,10 @@ def _infer_once(model, text_input, temperature, nucleus_probability):
 def generate(model, prompt, n_tokens, temperature, nucleus_probability):
     output = ""
     for _ in range(n_tokens):
-        # TODO: handle "end of text" token
-        output += _infer_once(model, prompt + output, temperature, nucleus_probability)
+        next_token = _infer_once(model, prompt + output, temperature, nucleus_probability)
+        if next_token == "<|endoftext|>":
+            break
+        output += next_token
     return output
 
 def remove_newlines(s):
