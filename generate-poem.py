@@ -13,6 +13,7 @@ def validate_topp(value):
 parser = argparse.ArgumentParser(prog = "Generate Poem")
 parser.add_argument("--temp", type = float, default = 1.0, help = "model temperature")
 parser.add_argument("--topp", type = validate_topp, default = 1.0, help = "nucleus sampling cumulative probability")
+parser.add_argument("--model", default = None, help = "model file to load")
 args = parser.parse_args()
 
 TOKENS_PER_LINE = 16
@@ -60,7 +61,11 @@ def generate(model, prompt, n_tokens, temperature, nucleus_probability):
 def remove_newlines(s):
     return s.strip().replace("\n", " ")
 
-base_gpt2_small = transformers.AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+
+if args.model:
+    model = torch.load(args.model)
+else:
+    model = transformers.AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
 
 tokenizer = transformers.AutoTokenizer.from_pretrained(
         "openai-community/gpt2",
@@ -71,7 +76,7 @@ tokenizer.pad_token = tokenizer.eos_token
 prompt = "Write a poem:\n"
 poem = ""
 for i in range(STANZAS * LINES_PER_STANZA):
-    line = generate(base_gpt2_small, prompt + poem, TOKENS_PER_LINE, args.temp, args.topp)
+    line = generate(model, prompt + poem, TOKENS_PER_LINE, args.temp, args.topp)
     line = remove_newlines(line)
     if i % LINES_PER_STANZA == LINES_PER_STANZA - 1:
         line += "\n"

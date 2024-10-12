@@ -1,2 +1,5 @@
 download_cache/
 cache/
+checkpoints/
+
+.DS_Store
