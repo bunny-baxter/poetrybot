@@ -6,12 +6,14 @@ import copy
 import datetime
 import os
 import json
+import re
 import time
 import torch
 import transformers
 
 parser = argparse.ArgumentParser(prog = "Train poetry model")
 parser.add_argument("dataset_config", help = "Json file listing which files and directories to load poems from")
+parser.add_argument("--device", choices = ["cpu", "cuda", "mps"], default = "cpu", help = "Tensor device")
 args = parser.parse_args()
 
 base_model = transformers.AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
@@ -24,13 +26,17 @@ tokenizer.pad_token = tokenizer.eos_token
 
 TOKEN_COUNT = len(tokenizer)
 
+EXTRA_WHITE_SPACE_REGEX = re.compile(r"\W\W+")
+def _normalize_whitespace(s):
+    return re.sub(EXTRA_WHITE_SPACE_REGEX, " ", s.strip().replace("\n", " "))
+
 def load_poems_from_directory(dirpath):
     poems = []
     for filename in os.listdir(dirpath):
         if filename == "author_index.html":
             continue
         filepath = os.path.join(dirpath, filename)
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, "r", encoding = "utf-8") as f:
             contents = f.read()
         within_poem = False
         poem = ""
@@ -61,7 +67,7 @@ class PrefixNextTokenDataset(torch.utils.data.Dataset):
 
         self.items = []
         for text in text_list:
-            tokenizer_result = tokenizer(text, padding = True)
+            tokenizer_result = tokenizer(_normalize_whitespace(text), padding = True)
             tokenized_text = tokenizer_result.input_ids
             token_window = collections.deque()
             for i in range(len(tokenized_text) - 1):
@@ -79,7 +85,7 @@ class PrefixNextTokenDataset(torch.utils.data.Dataset):
             prefix = self.transform(prefix)
         if (self.target_transform):
             next_token = self.target_transform(next_token)
-        return (torch.tensor(prefix), torch.nn.functional.one_hot(torch.tensor(next_token).to(torch.int64), TOKEN_COUNT))
+        return (torch.tensor(prefix).to(args.device), torch.nn.functional.one_hot(torch.tensor(next_token).to(torch.int64).to(args.device), TOKEN_COUNT))
 
 all_poems = []
 
@@ -99,7 +105,7 @@ assert len(all_poems) > 0
 TOKEN_WINDOW_SIZE = 32
 dataset = PrefixNextTokenDataset(all_poems, tokenizer, TOKEN_WINDOW_SIZE)
 
-training_model = copy.deepcopy(base_model)
+training_model = copy.deepcopy(base_model).to(args.device)
 
 def train(dataloader, model, loss_fn, optimizer):
     batch_count = len(dataloader)
@@ -115,8 +121,8 @@ def train(dataloader, model, loss_fn, optimizer):
 
         print(f"finished batch {batch_index+1}/{batch_count}: loss = {loss.item()}")
 
-LEARNING_RATE = 0.00001
-BATCH_SIZE = 256
+LEARNING_RATE = 0.000001
+BATCH_SIZE = 128
 EPOCHS = 1
 
 dataloader = torch.utils.data.DataLoader(dataset, batch_size = BATCH_SIZE, shuffle = True)
@@ -131,5 +137,9 @@ for epoch in range(EPOCHS):
 end_time = time.time()
 print(f"training time was {end_time - begin_time} seconds")
 
-date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-torch.save(training_model, f"checkpoints/poetrybot {date_str}.pt")
+os.makedirs("checkpoints", exist_ok = True)
+
+date_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+model_filename = f"checkpoints/poetrybot_{date_str}.pt"
+torch.save(training_model, model_filename)
+print(f"saved to {model_filename}")

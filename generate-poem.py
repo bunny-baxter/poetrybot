@@ -14,6 +14,7 @@ parser = argparse.ArgumentParser(prog = "Generate Poem")
 parser.add_argument("--temp", type = float, default = 1.0, help = "model temperature")
 parser.add_argument("--topp", type = validate_topp, default = 1.0, help = "nucleus sampling cumulative probability")
 parser.add_argument("--model", default = None, help = "model file to load")
+parser.add_argument("--device", choices = ["cpu", "cuda", "mps"], default = "cpu", help = "Tensor device")
 args = parser.parse_args()
 
 TOKENS_PER_LINE = 16
@@ -23,7 +24,9 @@ STANZAS = 4
 def _infer_once(model, text_input, temperature, nucleus_probability):
     with torch.no_grad():
         tokenized = tokenizer(text_input, return_tensors = "pt")
-        output = model(tokenized.input_ids, attention_mask = tokenized.attention_mask)
+        # TODO: Re-tokenizing the input on every new token is probably slowing generation down a lot.
+        input_ids = tokenized.input_ids.to(args.device)
+        output = model(input_ids, attention_mask = tokenized.attention_mask)
         next_token_probabilities = output.logits[0][-1]
         if temperature == 0.0:
             next_token = next_token_probabilities.argmax(0)
@@ -32,7 +35,7 @@ def _infer_once(model, text_input, temperature, nucleus_probability):
                 next_token_probabilities = next_token_probabilities / temperature
             next_token_probabilities = next_token_probabilities.softmax(0)
             if nucleus_probability < 1.0:
-                sorted_probabilities, sorted_indexes = torch.sort(next_token_probabilities, descending=True)
+                sorted_probabilities, sorted_indexes = torch.sort(next_token_probabilities, descending = True)
                 i = 0
                 while i < len(sorted_probabilities) and sorted_probabilities[i] <= nucleus_probability:
                     nucleus_probability -= sorted_probabilities[i]
@@ -63,9 +66,9 @@ def remove_newlines(s):
 
 
 if args.model:
-    model = torch.load(args.model)
+    model = torch.load(args.model).to(args.device)
 else:
-    model = transformers.AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+    model = transformers.AutoModelForCausalLM.from_pretrained("openai-community/gpt2").to(args.device)
 
 tokenizer = transformers.AutoTokenizer.from_pretrained(
         "openai-community/gpt2",
