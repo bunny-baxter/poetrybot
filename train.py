@@ -121,7 +121,7 @@ def train(dataloader, model, loss_fn, optimizer):
 
         print(f"finished batch {batch_index+1}/{batch_count}: loss = {loss.item()}")
 
-LEARNING_RATE = 0.000001
+LEARNING_RATE = 0.00000003
 BATCH_SIZE = 128
 EPOCHS = 1
 
